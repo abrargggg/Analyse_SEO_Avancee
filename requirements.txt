@@ -1,7 +1,8 @@
-streamlit
+flask
+gunicorn
 requests
-beautifulsoup4
-selenium
-pillow
+bs4
+Pillow
 matplotlib
 wordcloud
+
