@@ -5,30 +5,27 @@ from urllib.parse import urljoin
 import tempfile
 import base64
 import io
-from selenium import webdriver
-import time
 from PIL import Image
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import os
 
-# Fonction pour récupérer toutes les images d'une page web avec Selenium
-def extraire_images_selenium(url):
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    driver = webdriver.Chrome(options=options)
-    driver.get(url)
-    time.sleep(3)  # Attendre le chargement complet de la page
-    soup = BeautifulSoup(driver.page_source, "html.parser")
-    driver.quit()
-    images = []
-    for img in soup.find_all("img"):
-        img_url = img.get("src")
-        alt_text = img.get("alt", "Pas de texte alternatif")
-        if img_url:
-            full_url = urljoin(url, img_url) if not img_url.startswith("data:image") else img_url
-            images.append({"URL": full_url, "Texte alternatif": alt_text})
-    return images
+# Fonction pour récupérer toutes les images d'une page web avec BeautifulSoup
+def extraire_images_beautifulsoup(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        images = []
+        for img in soup.find_all("img"):
+            img_url = img.get("src")
+            alt_text = img.get("alt", "Pas de texte alternatif")
+            if img_url:
+                full_url = urljoin(url, img_url)
+                images.append({"URL": full_url, "Texte alternatif": alt_text})
+        return images
+    except Exception as e:
+        return f"Erreur : {e}"
 
 # Fonction pour télécharger et convertir l'image
 def telecharger_et_convertir_image(image_info):
@@ -89,7 +86,7 @@ def extraire_donnees_page(url):
     meta_keywords = soup.find("meta", attrs={"name": "keywords"})
     meta_keywords = meta_keywords["content"] if meta_keywords else "Pas de mots-clés"
     contenu = " ".join([p.text for p in soup.find_all("p")])
-    images = extraire_images_selenium(url)
+    images = extraire_images_beautifulsoup(url)
 
     return {
         "titre": titre,
@@ -102,7 +99,7 @@ def extraire_donnees_page(url):
 # Fonction pour générer des recommandations SEO avec une API locale (Ollama ou autre)
 def generer_seo_avec_ollama(donnees_page):
     try:
-        model = "llama3.2:1b"  # Le modèle est maintenant explicitement passé ici
+        model = "llama3.2:1b"
         prompt = f"""
         Voici les données SEO d'une page web :
         - Titre : {donnees_page['titre']}
@@ -113,11 +110,10 @@ def generer_seo_avec_ollama(donnees_page):
         Veuillez fournir des recommandations SEO pour améliorer le contenu, l'utilisation des mots-clés et les éléments de la page.
         """
         
-        url = "http://127.0.0.1:5000/v1/completions"  # URL correcte de l'API
+        url = "http://127.0.0.1:5000/v1/completions"
         headers = {"Content-Type": "application/json"}
-        data = {"model": model, "prompt": prompt}  # Assurez-vous que le modèle est passé ici
+        data = {"model": model, "prompt": prompt}
 
-        # Envoi de la requête POST pour générer des recommandations SEO
         response = requests.post(url, json=data, headers=headers)
 
         if response.status_code == 200:
@@ -170,42 +166,32 @@ if st.button("Analyser"):
         else:
             st.write("Aucun mot-clé trouvé.")
 
-        # **Amélioration de l'affichage des images avec une disposition en cartes et un fond personnalisé**
+        # Analyse d'images
         st.markdown("### 🖼️ Analyse d'images et recommandations SEO")
         for image_info in donnees_page["images"]:
             image_url = image_info.get("URL", "URL indisponible")
             image_path, image = telecharger_et_convertir_image(image_info)
             recommandations = analyse_seo_image(image_path, image_info["Texte alternatif"])
 
-            with st.container():  # Pour un affichage vertical des images avec du style
+            with st.container():
                 st.markdown(f"#### Image :")
-                
-                # Afficher l'image dans une colonne
                 col1, col2 = st.columns([1, 2])
                 with col1:
                     if image:
-                        st.image(image, use_container_width=True)  # Affichage de l'image avec la largeur du conteneur
+                        st.image(image, use_container_width=True)
                     else:
                         st.write("Image non disponible")
-                
-                # Affichage des informations et recommandations, y compris le lien dans la colonne de droite
                 with col2:
-                    st.markdown(f"**URL de l'image :** {image_url}")  # URL de l'image affichée dans la colonne de droite
+                    st.markdown(f"**URL de l'image :** {image_url}")
                     st.markdown(f"**Texte alternatif :** {image_info['Texte alternatif']}")
                     st.markdown("**Recommandations SEO :**")
                     for rec in recommandations:
                         st.markdown(f"- {rec}")
 
-        # **Bloc de recommandations SEO personnalisées avec un fond de couleur**
+        # Recommandations personnalisées
         st.markdown(""" 
             <div style="background-color:#A1C6EA; padding: 15px; border-radius: 8px;">
                 <h3 style="color:#0C3C6A;">🛠️ Recommandations SEO personnalisées</h3>
                 <p style="color:#0C3C6A;">""" + generer_seo_avec_ollama(donnees_page) + """</p>
             </div>
         """, unsafe_allow_html=True)
-
-        # Insights SEO supplémentaires
-        st.markdown("---")
-        st.markdown("### 📊 Insights SEO supplémentaires")
-        st.markdown("**Compatibilité mobile et optimisation de la vitesse**")
-        st.write("Pour un rapport de compatibilité mobile et des recommandations de vitesse, utilisez un outil tel que Google PageSpeed Insights.")  
