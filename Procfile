@@ -1,1 +1,2 @@
-web: gunicorn app:app
+web: gunicorn seo_app:app
+
